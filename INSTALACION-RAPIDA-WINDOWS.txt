@@ -1,0 +1,58 @@
+PORTAFOLIO JUNIOR FRONTEND — CONTROL TOTAL (WINDOWS)
+
+REQUISITOS
+- Node.js 22 o posterior.
+- PostgreSQL 16 o posterior instalado y funcionando.
+- Tu base de datos existente llamada cv.
+- Para PostgreSQL instalado directamente en Windows, el ejemplo utiliza 127.0.0.1:5432. Docker no es necesario en ese modo.
+
+INSTALACIÓN
+1. Extrae el ZIP en una carpeta nueva, por ejemplo:
+   C:\Users\Armando\Desktop\Portafolio-Junior-Frontend-Control-Total
+2. Copia .env.local.example a .env.local:
+   Copy-Item .env.local.example .env.local
+3. Abre .env.local y completa DATABASE_URL, ADMIN_PASSWORD y ADMIN_SESSION_SECRET.
+   Ejemplo de URL: postgresql://postgres:TU_CLAVE@127.0.0.1:5432/cv
+   Usa la contraseña vigente de PostgreSQL. Si contiene @, #, %, / u otros símbolos, codifica los caracteres especiales en la URL.
+   ADMIN_PASSWORD debe ser única y de 16 caracteres o más.
+   ADMIN_SESSION_SECRET debe ser aleatorio y de 48 caracteres o más.
+   No compartas .env.local ni lo subas a Git.
+4. En PowerShell, dentro de la carpeta del proyecto, ejecuta:
+   npm install
+   npm run test:config
+   npm run db:setup
+   npm run dev
+5. Abre:
+   CV público: http://localhost:3000
+   Administrador: http://localhost:3000/admin
+   Noticias: http://localhost:3000/noticias
+
+BASE DE DATOS Y CONSERVACIÓN
+- db:setup valida que DATABASE_URL apunte a la base cv.
+- Solo agrega tablas/columnas e índices que falten; no ejecuta DROP ni TRUNCATE.
+- No crea una base nueva ni cambia la contraseña de PostgreSQL.
+- Haz un respaldo de PostgreSQL antes de migrar una base con información importante.
+- Si ya tienes un .env.local de otro proyecto, no lo sobrescribas a ciegas: revisa host, puerto y nombre de base y conserva tus credenciales privadas.
+
+FUNCIONES
+- Editor completo del CV, foto, portada y descarga PDF.
+- JPG, PNG, WebP y GIF animado para perfil, portada y fondo.
+- Composiciones clásica, minimalista y editorial; paletas, colores HEX, fondos y animaciones.
+- Noticias con texto, imágenes/GIF, galerías y vídeo incrustado de YouTube/Vimeo; los tres artículos publicados más recientes aparecen en la portada principal.
+- Formulario de contacto y chat persistente con bandeja administrativa.
+- Chat con scroll interno estable; la consulta periódica no desplaza la página al leer mensajes anteriores.
+- Avisos sonoros y notificaciones del navegador en el panel de administración y para el visitante cuando responde el administrador (requieren activación y permiso; las páginas deben permanecer abiertas). No hay push cuando el navegador está cerrado.
+- El administrador puede eliminar conversaciones individuales con su historial y limpiar el registro de visitas sin tocar los demás datos.
+- El PDF permite personalizar color e imagen JPG/PNG de portada e incluye la foto de perfil compatible. GIF mantiene animación en la web, no dentro del PDF.
+- Registro aproximado de navegador, sistema y tipo de dispositivo. La ubicación GPS solo se guarda con consentimiento explícito y HTTPS/localhost.
+
+PRIVACIDAD Y LIMITACIONES DEL NAVEGADOR
+- Una página web no puede leer la dirección MAC, número de serie ni el nombre privado del dispositivo. El panel muestra una etiqueta aproximada (por ejemplo, PC Windows · Edge o iPhone · Safari).
+- En localhost o un sitio HTTPS se puede solicitar ubicación al visitante. En una IP LAN servida por HTTP el navegador puede bloquear la geolocalización.
+- La ubicación por IP se muestra cuando un proxy confiable aporta encabezados de ciudad/región. Opcionalmente configura IPINFO_TOKEN en el entorno del servidor si tienes un proxy que entrega una IP de cliente fiable; la IP se usa temporalmente y no se almacena.
+- Las notificaciones de escritorio requieren permiso del navegador y el panel abierto. No se envían push cuando el navegador está completamente cerrado.
+
+SEGURIDAD
+- Cambia cualquier contraseña que hayas compartido previamente.
+- En producción usa HTTPS y ADMIN_SECURE_COOKIE=true.
+- No publiques .env.local, respaldos .dump ni credenciales.

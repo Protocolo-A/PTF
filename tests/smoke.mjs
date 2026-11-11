@@ -1,0 +1,173 @@
+import { chromium } from "playwright";
+import assert from "node:assert/strict";
+
+const base = process.env.TEST_BASE_URL || "http://localhost:3000";
+const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "es-ES" });
+const page = await context.newPage();
+const errors = [];
+page.on("pageerror", (err) => errors.push(err.message));
+const originalResponse = await page.request.get(`${base}/api/resume`);
+assert.equal(originalResponse.status(), 200);
+const original = await originalResponse.json();
+const testEmail = `qa-${Date.now()}@example.com`;
+const getData = async () => (await page.request.get(`${base}/api/resume`)).json();
+const save = async () => {
+  const responsePromise = page.waitForResponse((r) => r.url().endsWith("/api/resume") && r.request().method() === "PUT");
+  await page.getByRole("button", { name: "Guardar cambios", exact: true }).first().click();
+  const response = await responsePromise;
+  assert.equal(response.status(), 200, "Publishing must succeed");
+  await page.waitForFunction(() => document.querySelector(".admin-topbar .button-primary")?.disabled === true);
+  await page.getByText("Cambios publicados. Tu CV y tu PDF ya están actualizados.", { exact: true }).waitFor();
+};
+const navigateAdmin = async (name) => {
+  await page.getByRole("navigation", { name: "Panel de administración" }).getByRole("button", { name, exact: true }).click();
+};
+
+try {
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: "/tmp/devfolio-desktop.png", fullPage: false });
+  assert.equal(await page.getByRole("heading", { name: original.profile.name, exact: true }).count(), 1);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "Desktop should not overflow");
+  await page.getByRole("button", { name: "Open Source", exact: true }).click();
+  await page.getByRole("button", { name: "Explorar proyecto", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("heading", { name: "Java Starter Kit", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await page.getByRole("button", { name: /^Todos/ }).click();
+  await page.getByRole("button", { name: "Ver todos los proyectos" }).click();
+  assert.equal(await page.locator(".project-card").count(), original.projects.length);
+  await page.getByLabel("Tu nombre", { exact: true }).fill("Prueba funcional");
+  await page.getByLabel("Tu email", { exact: true }).fill(testEmail);
+  await page.getByLabel("¿Qué tienes en mente?", { exact: true }).fill("Mensaje de prueba automatizada para comprobar el formulario y la bandeja de entrada.");
+  await page.getByRole("button", { name: "Enviar mensaje", exact: true }).click();
+  await page.getByRole("heading", { name: "¡Ya tenemos un comienzo!", exact: true }).waitFor();
+  console.log("PASS: public navigation, filters, project dialog and contact");
+
+  const mobile = await context.newPage();
+  await mobile.setViewportSize({ width: 390, height: 844 });
+  await mobile.goto(base, { waitUntil: "networkidle" });
+  await mobile.screenshot({ path: "/tmp/devfolio-mobile.png", fullPage: false });
+  assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "Mobile should not overflow");
+  await mobile.getByRole("button", { name: "Abrir navegación", exact: true }).click();
+  await mobile.getByRole("navigation", { name: "Secciones del CV" }).getByRole("link", { name: "Proyectos", exact: true }).click();
+  assert.equal(await mobile.locator(".sidebar.sidebar-open").count(), 0);
+  await mobile.close();
+  console.log("PASS: mobile layout and navigation");
+
+  await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
+  await page.screenshot({ path: "/tmp/devfolio-admin.png", fullPage: false });
+  await navigateAdmin("Perfil e imágenes");
+  await page.getByLabel("Nombre completo *", { exact: true }).fill(`${original.profile.name} QA`);
+  const popupPromise = context.waitForEvent("page");
+  await page.getByRole("button", { name: "Vista previa", exact: true }).click();
+  const preview = await popupPromise;
+  await preview.waitForLoadState("networkidle");
+  await preview.getByRole("heading", { name: `${original.profile.name} QA`, exact: true }).waitFor();
+  await preview.getByText("Estos cambios todavía no están publicados", { exact: false }).waitFor();
+  assert.equal((await getData()).profile.name, original.profile.name, "Preview must not publish the draft");
+  await preview.close();
+  const avatar = page.locator(".upload-field").filter({ hasText: "Foto de perfil" });
+  await avatar.locator('input[type="file"]').setInputFiles("public/images/profile.jpg");
+  await avatar.locator('img[src^="/api/media/"]').waitFor();
+  const cover = page.locator(".upload-field").filter({ hasText: "Imagen de portada" });
+  await cover.locator('input[type="file"]').setInputFiles("public/images/forest-cover.jpg");
+  await cover.locator('img[src^="/api/media/"]').waitFor();
+  await save();
+  const updated = await getData();
+  assert.equal(updated.profile.name, `${original.profile.name} QA`);
+  assert.ok(updated.profile.avatar.startsWith("/api/media/"));
+  assert.ok(updated.profile.cover.startsWith("/api/media/"));
+  const imageResponse = await page.request.get(`${base}${updated.profile.avatar}`);
+  assert.equal(imageResponse.status(), 200);
+  assert.equal(imageResponse.headers()["content-type"], "image/jpeg");
+  const pdf = await page.request.get(`${base}/api/cv`);
+  assert.equal(pdf.status(), 200);
+  assert.equal((await pdf.body()).subarray(0, 5).toString(), "%PDF-");
+  console.log("PASS: administrator editing, draft preview, image uploads, publication and PDF");
+
+  await navigateAdmin("Experiencia");
+  await page.getByRole("button", { name: "Añadir experiencia", exact: true }).click();
+  const exp = page.locator(".editor-item").last();
+  await exp.getByLabel("Puesto o cargo", { exact: true }).fill("Java Developer QA");
+  await exp.getByLabel("Empresa", { exact: true }).fill("Empresa de prueba");
+  await exp.getByLabel("Tecnologías", { exact: false }).fill("Java, Spring Boot, Docker");
+  await save();
+  assert.equal((await getData()).experience.length, original.experience.length + 1);
+  await exp.getByRole("button", { name: "Eliminar Java Developer QA", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Eliminar", exact: true }).click();
+  await save();
+  assert.equal((await getData()).experience.length, original.experience.length);
+
+  await navigateAdmin("Proyectos");
+  await page.getByRole("button", { name: "Añadir proyecto", exact: true }).click();
+  const project = page.locator(".editor-item").last();
+  await project.getByLabel("Nombre del proyecto", { exact: true }).fill("Proyecto QA");
+  await project.getByLabel("Tecnologías", { exact: false }).fill("Java, Spring Boot, PostgreSQL");
+  await save();
+  const projectData = (await getData()).projects.at(-1);
+  assert.equal(projectData.name, "Proyecto QA");
+  assert.deepEqual(projectData.technologies, ["Java", "Spring Boot", "PostgreSQL"]);
+  await project.getByRole("button", { name: "Eliminar Proyecto QA", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Eliminar", exact: true }).click();
+  await save();
+
+  await navigateAdmin("Habilidades");
+  await page.getByRole("button", { name: "Añadir habilidad", exact: true }).click();
+  const skill = page.locator(".skill-editor-row").last();
+  await skill.locator('input:not([type="range"])').fill("Quarkus QA");
+  await skill.getByRole("slider").press("End");
+  await save();
+  assert.equal((await getData()).skills.at(-1).level, 100);
+  await skill.getByRole("button", { name: "Eliminar Quarkus QA", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Eliminar", exact: true }).click();
+  await save();
+  console.log("PASS: experience, project and skill creation, editing and deletion");
+
+  await navigateAdmin("Formación e idiomas");
+  await page.getByRole("button", { name: "Añadir formación", exact: true }).click();
+  const education = page.locator(".editor-item").nth(original.education.length);
+  await education.getByLabel("Título o programa", { exact: true }).fill("Curso Java QA");
+  await save();
+  assert.equal((await getData()).education.length, original.education.length + 1);
+  await education.getByRole("button", { name: "Eliminar Curso Java QA", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Eliminar", exact: true }).click();
+  await save();
+
+  await navigateAdmin("Configuración");
+  await page.getByRole("switch", { name: "Mostrar Proyectos", exact: true }).click();
+  await save();
+  assert.equal((await getData()).settings.sections.projects, false);
+  await page.getByRole("switch", { name: "Mostrar Proyectos", exact: true }).click();
+  await save();
+  console.log("PASS: education and section visibility configuration");
+
+  await navigateAdmin("Mensajes");
+  await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+  const message = page.locator(".message-card").filter({ hasText: "Prueba funcional" }).last();
+  await message.locator(".message-summary").click();
+  await message.getByRole("button", { name: "Marcar leído", exact: true }).click();
+  await message.getByRole("button", { name: "Marcar no leído", exact: true }).waitFor();
+  const storedMessages = await (await page.request.get(`${base}/api/admin/messages`)).json();
+  assert.equal(storedMessages.find((m) => m.email === testEmail).read, true);
+  await message.getByRole("button", { name: "Eliminar mensaje", exact: true }).click();
+  await page.locator("dialog[open]").getByRole("button", { name: "Eliminar", exact: true }).click();
+  await message.waitFor({ state: "detached" });
+  console.log("PASS: contact inbox, read state and deletion");
+
+  const invalid = await page.request.put(`${base}/api/resume`, { data: { profile: {} } });
+  assert.equal(invalid.status(), 400);
+  const crossOrigin = await page.request.put(`${base}/api/resume`, { data: original, headers: { origin: "https://invalid.example" } });
+  assert.equal(crossOrigin.status(), 401);
+  assert.deepEqual(errors, [], `Browser errors: ${errors.join(", ")}`);
+  console.log("PASS: input validation, origin protection and zero browser exceptions");
+} finally {
+  const restored = await page.request.put(`${base}/api/resume`, { data: original });
+  assert.equal(restored.status(), 200, "Demo profile must be restored");
+  const messages = await (await page.request.get(`${base}/api/admin/messages`)).json();
+  for (const m of messages) if (m.email === testEmail) await page.request.delete(`${base}/api/admin/messages?id=${m.id}`);
+  await page.evaluate(() => { localStorage.removeItem("devfolio_admin_draft_v1"); localStorage.removeItem("devfolio_preview"); }).catch(() => {});
+  await browser.close();
+  console.log("Demo content restored.");
+}

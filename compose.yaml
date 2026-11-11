@@ -1,0 +1,56 @@
+name: devfolio
+
+x-database-url: &database-url ${DATABASE_URL:?Ejecuta node scripts/setup-docker.mjs primero}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cv}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env.docker}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  db-init:
+    build:
+      context: .
+      target: migrations
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    # Local-only by default. Use an HTTPS reverse proxy for public deployments.
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: *database-url
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Falta ADMIN_PASSWORD en .env.docker}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?Falta ADMIN_SESSION_SECRET en .env.docker}
+      ADMIN_SECURE_COOKIE: ${ADMIN_SECURE_COOKIE:-false}
+      IPINFO_TOKEN: ${IPINFO_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

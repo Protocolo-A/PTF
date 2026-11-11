@@ -1,0 +1,25 @@
+# PostgreSQL local para ejecutar Next.js directamente en Windows.
+# Conserva el nombre del proyecto/volumen usado por la configuración local anterior.
+name: devfolio-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DEVFOLIO_LOCAL_DB_NAME:-cv}
+      POSTGRES_USER: ${DEVFOLIO_LOCAL_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DEVFOLIO_LOCAL_DB_PASSWORD:?Configura DEVFOLIO_LOCAL_DB_PASSWORD en .env.local}
+    ports:
+      - "127.0.0.1:${DEVFOLIO_LOCAL_DB_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  postgres-data:
