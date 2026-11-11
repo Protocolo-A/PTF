@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Direcciones IP permitidas para desarrollo local
   allowedDevOrigins: [
     "192.168.56.1",
-    "192.168.0.3",
+    "192.168.0.4",
   ],
 
   output:
