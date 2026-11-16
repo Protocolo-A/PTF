@@ -167,18 +167,16 @@ export default function PublicResume({
     (item) => !item.section || data.settings.sections[item.section]
   );
 
-  const categories = ["Todos", ...Array.from(new Set(data.projects.map((project) => project.category)))];
+const categories = [
+  "Todos",
+  ...Array.from(new Set(data.projects.map((project) => project.category))),
+];
 
-  const filteredProjects = data.projects.filter((project) =>
-    filter === "Todos"
-      ? allProjects || project.featured
-      : project.category === filter
-  );
+const filteredProjects = data.projects.filter((project) =>
+  filter === "Todos" || project.category === filter
+);
 
-  const shownProjects =
-    filter === "Todos" && !allProjects && filteredProjects.length === 0
-      ? data.projects.slice(0, 3)
-      : filteredProjects;
+const shownProjects = filteredProjects;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -443,20 +441,22 @@ export default function PublicResume({
                   ))}
                 </div>
 
-                <div className="profile-stats">
-                  <div>
-                    <strong>{p.yearsExperience}</strong>
-                    <span>Nivel profesional</span>
-                  </div>
-                  <div>
-                    <strong>{p.projectCount}</strong>
-                    <span>Proyectos en portafolio</span>
-                  </div>
-                  <div>
-                    <strong>∞</strong>
-                    <span>Ganas de aprender</span>
-                  </div>
-                </div>
+               <div className="profile-stats">
+               <div>
+                   <strong>{p.yearsExperience}</strong>
+                   <span>Nivel profesional</span>
+              </div>
+
+               <div>
+               <strong>{data.projects.length || ""}</strong>
+               <span>Proyectos en portafolio</span>
+               </div>
+
+               <div>
+               <strong>∞</strong>
+               <span>Ganas de aprender</span>
+               </div>
+              </div>
               </article>
 
               <article className="surface-card stack-card">
@@ -545,17 +545,19 @@ export default function PublicResume({
           )}
 
           {data.settings.sections.projects && (
-            <section id="proyectos" data-cv-section className="cv-section">
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow"><span className="section-number"></span> DEL CÓDIGO AL MUNDO</span>
-                  <h2>Ideas que se hicieron realidad.</h2>
-                  <p>Una selección de lo que me gusta construir.</p>
-                </div>
-                <span className="section-note">
-                  <Layers size={15} />{data.projects.length} proyectos seleccionados
-                </span>
-              </div>
+  <section id="proyectos" data-cv-section className="cv-section">
+    <div className="section-heading">
+      <div>
+        <span className="eyebrow">
+          <span className="section-number"></span> DEL CÓDIGO AL MUNDO
+        </span>
+        <h2>Ideas que se hicieron realidad.</h2>
+        <p>Una selección de lo que me gusta construir.</p>
+      </div>
+      <span className="section-note">
+        <Layers size={15} />{data.projects.length} proyectos seleccionados
+      </span>
+    </div>
 
               <div className="project-filters" aria-label="Filtrar proyectos">
                 {categories.map((category) => (
